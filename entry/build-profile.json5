@@ -1,0 +1,18 @@
+{
+  "apiType": 'stageMode',
+  "buildOption": {
+  },
+  "targets": [
+    {
+      "name": "default",
+      "runtimeOS": "HarmonyOS"
+    },
+    {
+      "name": "ohosTest",
+    },
+    {
+      "name": "devicedebug",
+      "runtimeOS": "HarmonyOS"
+    }
+  ]
+}

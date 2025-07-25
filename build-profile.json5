@@ -1,0 +1,82 @@
+{
+  "app": {
+    "signingConfigs": [
+      {
+        "name": "default",
+        "type": "HarmonyOS",
+        "material": {
+          "certpath": "C:\\Users\\chaon\\.ohos\\config\\default_ChatwithAI_M_Dlidj-L_DqwLd4HncQo188WumYx7vF-2zgEwtkoA0=.cer",
+          "keyAlias": "debugKey",
+          "keyPassword": "00000019735E4097DF3BC926C060331BD94F02717D3BA4686CB73C1FFBD7C46D63B233395F0CDC37EE",
+          "profile": "C:\\Users\\chaon\\.ohos\\config\\default_ChatwithAI_M_Dlidj-L_DqwLd4HncQo188WumYx7vF-2zgEwtkoA0=.p7b",
+          "signAlg": "SHA256withECDSA",
+          "storeFile": "C:\\Users\\chaon\\.ohos\\config\\default_ChatwithAI_M_Dlidj-L_DqwLd4HncQo188WumYx7vF-2zgEwtkoA0=.p12",
+          "storePassword": "00000019548C4C686E3BECD2568509746CEF6D7FF57C29E806BF74871D933E02C433A07818D37516B3"
+        }
+      },
+      {
+        "name": "debug",
+        "type": "HarmonyOS",
+        "material": {
+          "certpath": "C:\\Users\\chaon\\.ohos\\config\\debug_ChatwithAI_M_Dlidj-L_DqwLd4HncQo188WumYx7vF-2zgEwtkoA0=.cer",
+          "keyAlias": "debugKey",
+          "keyPassword": "0000001A542B53F8AF6745AC78AE96D062626CB5B4ADCCE90DB8C394E89FF02828F613CAF9C6C669C58A",
+          "profile": "C:\\Users\\chaon\\.ohos\\config\\debug_ChatwithAI_M_Dlidj-L_DqwLd4HncQo188WumYx7vF-2zgEwtkoA0=.p7b",
+          "signAlg": "SHA256withECDSA",
+          "storeFile": "C:\\Users\\chaon\\.ohos\\config\\debug_ChatwithAI_M_Dlidj-L_DqwLd4HncQo188WumYx7vF-2zgEwtkoA0=.p12",
+          "storePassword": "0000001AD2D09BD8F5352D64E4232D0527205CABC682DD6FC7C98BE325F1B5927BABD330A07E1FBF633F"
+        }
+      }
+    ],
+    "products": [
+      {
+        "name": "default",
+        "signingConfig": "default",
+        "targetSdkVersion": "5.0.5(17)",
+        "compatibleSdkVersion": "5.0.5(17)",
+        "runtimeOS": "HarmonyOS",
+        "buildOption": {
+          "strictMode": {
+            "caseSensitiveCheck": true,
+            "useNormalizedOHMUrl": true
+          }
+        }
+      },
+      {
+        "name": "devicedebug",
+        "signingConfig": "devicedebug",
+        "compatibleSdkVersion": "5.0.5(17)",
+        "runtimeOS": "HarmonyOS",
+        "bundleName": "com.mznm.chatwithai"
+      }
+    ],
+    "buildModeSet": [
+      {
+        "name": "debug",
+      },
+      {
+        "name": "release"
+      }
+    ]
+  },
+  "modules": [
+    {
+      "name": "entry",
+      "srcPath": "./entry",
+      "targets": [
+        {
+          "name": "default",
+          "applyToProducts": [
+            "default"
+          ]
+        },
+        {
+          "name": "devicedebug",
+          "applyToProducts": [
+            "devicedebug"
+          ]
+        }
+      ]
+    }
+  ]
+}
