@@ -3,8 +3,10 @@
  * 完全符合 ArkTS 类型安全要求
  */
 
+import { MathRenderer, MathText } from './MathRenderer';
+
 export interface EnhancedMarkdownElement {
-  type: 'text' | 'heading' | 'code_block' | 'code_inline' | 'bold' | 'italic' | 'list_item' | 'quote' | 'link' | 'paragraph' | 'br' | 'hr';
+  type: 'text' | 'heading' | 'code_block' | 'code_inline' | 'bold' | 'italic' | 'list_item' | 'quote' | 'link' | 'paragraph' | 'br' | 'hr' | 'math_inline' | 'math_block';
   content: string;
   level?: number;
   language?: string;
@@ -13,12 +15,12 @@ export interface EnhancedMarkdownElement {
 }
 
 export interface InlinePattern {
-  type: 'code_inline' | 'bold' | 'italic' | 'link';
+  type: 'code_inline' | 'bold' | 'italic' | 'link' | 'math_inline';
   regex: RegExp;
 }
 
 export interface InlineMatch {
-  type: 'code_inline' | 'bold' | 'italic' | 'link';
+  type: 'code_inline' | 'bold' | 'italic' | 'link' | 'math_inline';
   content: string;
   start: number;
   end: number;
@@ -46,6 +48,22 @@ export class MarkdownItRenderer {
       // 跳过空行
       if (line.trim() === '') {
         i++;
+        continue;
+      }
+
+      // 解析块级数学公式 $$...$$ 
+      if (line.trim().startsWith('$$')) {
+        const mathBlockResult = MarkdownItRenderer.parseMathBlock(lines, i, '$$');
+        elements.push(mathBlockResult.element);
+        i = mathBlockResult.nextIndex;
+        continue;
+      }
+
+      // 解析块级数学公式 \[...\] - 必须是独立行且精确匹配
+      if (line.trim() === '\\[') {
+        const mathBlockResult = MarkdownItRenderer.parseMathBlock(lines, i, '\\[');
+        elements.push(mathBlockResult.element);
+        i = mathBlockResult.nextIndex;
         continue;
       }
 
@@ -92,7 +110,7 @@ export class MarkdownItRenderer {
         continue;
       }
 
-      // 解析普通文本（包含行内格式）
+      // 解析普通文本（包含行内格式和数学公式）
       const inlineElements = MarkdownItRenderer.parseCustomInlineElements(line);
       elements.push(...inlineElements);
       i++;
@@ -119,6 +137,45 @@ export class MarkdownItRenderer {
       type: 'code_block',
       content: codeLines.join('\n'),
       language: language || 'text'
+    };
+
+    const result: CodeBlockResult = {
+      element: element,
+      nextIndex: i + 1
+    };
+
+    return result;
+  }
+
+  /**
+   * 解析块级数学公式
+   */
+  private static parseMathBlock(lines: string[], startIndex: number, delimiter: string): CodeBlockResult {
+    const codeLines: string[] = [];
+    let endDelimiter: string;
+    
+    // 确定结束分隔符
+    if (delimiter === '$$') {
+      endDelimiter = '$$';
+    } else if (delimiter === '\\[') {
+      endDelimiter = '\\]';
+    } else {
+      endDelimiter = delimiter;
+    }
+    
+    let i = startIndex + 1;
+    while (i < lines.length) {
+      const currentLine = lines[i].trim();
+      if (currentLine === endDelimiter) {
+        break;
+      }
+      codeLines.push(lines[i]);
+      i++;
+    }
+
+    const element: EnhancedMarkdownElement = {
+      type: 'math_block',
+      content: codeLines.join('\n')
     };
 
     const result: CodeBlockResult = {
@@ -189,8 +246,9 @@ export class MarkdownItRenderer {
   private static parseCustomInlineElements(text: string): EnhancedMarkdownElement[] {
     const elements: EnhancedMarkdownElement[] = [];
     
-    // 定义解析模式
+    // 基本解析模式
     const codePattern: InlinePattern = { type: 'code_inline', regex: /`([^`]+)`/g };
+    const mathInlinePattern1: InlinePattern = { type: 'math_inline', regex: /\$([^$\n\r]{1,100})\$/g };
     const boldPattern1: InlinePattern = { type: 'bold', regex: /\*\*([\s\S]+?)\*\*/g };
     const boldPattern2: InlinePattern = { type: 'bold', regex: /__([\s\S]+?)__/g };
     const italicPattern1: InlinePattern = { type: 'italic', regex: /\*([\s\S]+?)\*/g };
@@ -198,13 +256,28 @@ export class MarkdownItRenderer {
     const linkPattern: InlinePattern = { type: 'link', regex: /\[([^\]]+)\]\(([^)]+)\)/g };
     
     const patterns: InlinePattern[] = [
-      codePattern,
+      codePattern,        // 代码优先级最高
+      mathInlinePattern1, // $...$
       boldPattern1,
       boldPattern2,
       italicPattern1,
       italicPattern2,
       linkPattern
     ];
+
+    // 只有当文本包含完整的LaTeX行内公式模式时才添加 \(...\) 支持
+    // 使用更严格的检测：必须包含 \( 和 \)，且中间有内容，且内容包含数学符号
+    const hasLatexInline = text.includes('\\(') && text.includes('\\)');
+    const hasMathSymbols = /\\[a-zA-Z]+|[\^_{}]|\d+/.test(text); // 包含LaTeX命令、上下标或数字
+    
+    if (hasLatexInline && hasMathSymbols) {
+      // 更精确的LaTeX行内公式正则：确保匹配成对的 \( 和 \)
+      const mathInlinePattern2: InlinePattern = { 
+        type: 'math_inline', 
+        regex: /\\\(([^)]*(?:[^\\)][^)]*)*)\\\)/g 
+      };
+      patterns.splice(2, 0, mathInlinePattern2); // 在$...$之后插入
+    }
 
     // 收集所有匹配项
     const matches: InlineMatch[] = [];
@@ -213,6 +286,15 @@ export class MarkdownItRenderer {
       pattern.regex.lastIndex = 0;
       let match: RegExpExecArray | null;
       while ((match = pattern.regex.exec(text)) !== null) {
+        // 对于LaTeX行内公式，进行额外验证
+        if (pattern.type === 'math_inline' && match[0].startsWith('\\(')) {
+          const content = match[1];
+          // 确保内容不为空且包含有意义的数学内容
+          if (!content.trim() || content.length > 200) {
+            continue; // 跳过空内容或过长内容
+          }
+        }
+        
         const matchObj: InlineMatch = {
           type: pattern.type,
           content: match[1],
@@ -318,7 +400,7 @@ export struct EnhancedMarkdownText {
 
     for (const element of elements) {
       if (element.type === 'heading' || element.type === 'code_block' || 
-          element.type === 'quote' || element.type === 'list_item' || element.type === 'hr') {
+          element.type === 'quote' || element.type === 'list_item' || element.type === 'hr' || element.type === 'math_block') {
         // 块级元素：如果当前组有内容，先添加到结果中
         if (currentGroup.length > 0) {
           groups.push(currentGroup);
@@ -368,6 +450,8 @@ export struct EnhancedMarkdownText {
       this.buildListItem(element)
     } else if (element.type === 'hr') {
       this.buildHorizontalRule()
+    } else if (element.type === 'math_block') {
+      this.buildMathBlock(element)
     } else {
       this.buildInlineElement(element)
     }
@@ -422,6 +506,13 @@ export struct EnhancedMarkdownText {
         .onClick(() => {
           console.info('链接点击:', element.url);
         })
+    } else if (element.type === 'math_inline') {
+      MathText({ 
+        content: element.content, 
+        fontSize: fontSize, 
+        fontColor: this.fontColor, 
+        isInline: true 
+      })
     } else {
       // 普通文本
       Text(element.content)
@@ -510,6 +601,18 @@ export struct EnhancedMarkdownText {
   }
 
   @Builder
+  buildMathBlock(element: EnhancedMarkdownElement) {
+    MathText({ 
+      content: element.content, 
+      fontSize: this.fontSize + 2, 
+      fontColor: this.fontColor, 
+      isInline: false 
+    })
+    .width('100%')
+    .margin({ top: 8, bottom: 8 })
+  }
+
+  @Builder
   buildInlineElement(element: EnhancedMarkdownElement) {
     if (element.type === 'bold') {
       Text(element.content)
@@ -538,6 +641,13 @@ export struct EnhancedMarkdownText {
           console.info('链接点击:', element.url);
           // 这里可以添加打开链接的逻辑
         })
+    } else if (element.type === 'math_inline') {
+      MathText({ 
+        content: element.content, 
+        fontSize: this.fontSize, 
+        fontColor: this.fontColor, 
+        isInline: true 
+      })
     } else {
       // 普通文本
       Text(element.content)

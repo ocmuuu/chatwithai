@@ -2,6 +2,7 @@ import http from '@ohos.net.http';
 import { SettingsInit } from '../setups/SettingsInit';
 import { ChatMessage } from '../models/ChatModels';
 import PreferencesUtil from '../utils/PreferencesUtil';
+import { AIProvider, getProviderConfig } from '../setups/DefaultConfig';
 
 /**
  * 平台信息接口
@@ -125,28 +126,130 @@ export class AIService {
    * 根据平台获取API主机地址
    */
   private getApiHostForProvider(provider: string): string {
+    // 使用 DefaultConfig 中的配置
+    const providerEnum = provider as AIProvider;
+    const config = getProviderConfig(providerEnum);
+    
+    console.info(`获取 ${provider} 的API主机，配置存在: ${config ? '是' : '否'}`);
+    
+    if (config) {
+      console.info(`使用配置中的API主机: ${config.apiHost}`);
+      return config.apiHost;
+    }
+    
+    // 兜底逻辑，保持向后兼容
+    let fallbackHost: string;
     switch (provider) {
       case 'deepseek':
-        return 'https://api.deepseek.com';
+        fallbackHost = 'https://api.deepseek.com';
+        break;
       case 'openai':
-        return 'https://api.openai.com';
+        fallbackHost = 'https://api.openai.com';
+        break;
       case 'claude':
-        return 'https://api.anthropic.com';
+        fallbackHost = 'https://api.anthropic.com';
+        break;
       case 'gemini':
-        return 'https://generativelanguage.googleapis.com';
+        fallbackHost = 'https://generativelanguage.googleapis.com';
+        break;
       case 'siliconflow':
-        return 'https://api.siliconflow.cn';
+        fallbackHost = 'https://api.siliconflow.cn';
+        break;
       case 'volcengine':
-        return 'https://ark.cn-beijing.volces.com';
+        fallbackHost = 'https://ark.cn-beijing.volces.com';
+        break;
       case 'xAI':
-        return 'https://api.x.ai';
+        fallbackHost = 'https://api.x.ai';
+        break;
       case 'groq':
-        return 'https://api.groq.com/openai';
+        fallbackHost = 'https://api.groq.com/openai';
+        break;
       case 'chatglm-6b':
-        return 'https://open.bigmodel.cn/api/paas/v4/';
+        fallbackHost = 'https://open.bigmodel.cn/api/paas/v4/';
+        break;
       default:
-        return 'https://api.deepseek.com'; // 默认使用DeepSeek
+        fallbackHost = 'https://api.deepseek.com'; // 默认使用DeepSeek
+        break;
     }
+    
+    console.info(`使用兜底API主机: ${fallbackHost}`);
+    return fallbackHost;
+  }
+
+  /**
+   * 获取API路径
+   */
+  private getApiPathForProvider(provider: string): string {
+    const providerEnum = provider as AIProvider;
+    const config = getProviderConfig(providerEnum);
+    
+    if (config && config.apiPath) {
+      console.info(`使用配置中的API路径: ${config.apiPath}`);
+      return config.apiPath;
+    }
+    
+    // 特殊提供商的默认路径
+    let defaultPath: string;
+    switch (provider) {
+      case 'claude':
+        defaultPath = '/v1/messages';
+        break;
+      case 'gemini':
+        defaultPath = '/v1beta/models';
+        break;
+      case 'volcengine':
+        // 确保 volcengine 有正确的路径
+        defaultPath = '/api/v3/chat/completions';
+        break;
+      default:
+        defaultPath = '/v1/chat/completions';
+        break;
+    }
+    
+    console.info(`使用默认API路径: ${defaultPath}`);
+    return defaultPath;
+  }
+
+  /**
+   * 构建完整的 API URL
+   */
+  private buildApiUrl(provider: string, baseUrl: string): string {
+    console.info(`构建API URL - 提供商: ${provider}, 基础URL: ${baseUrl}`);
+    
+    const providerEnum = provider as AIProvider;
+    const config = getProviderConfig(providerEnum);
+    
+    let url = baseUrl;
+    
+    // 确保 baseUrl 不以 / 结尾
+    if (url.endsWith('/')) {
+      url = url.slice(0, -1);
+    }
+    
+    // 添加 API 路径
+    const apiPath = this.getApiPathForProvider(provider);
+    url += apiPath;
+    
+    // Gemini 特殊处理：需要在 URL 中指定模型并添加 generateContent
+    if (provider === 'gemini') {
+      url += `/${this.currentModel}:generateContent`;
+    }
+    
+    // 添加查询参数
+    const queryParams: string[] = [];
+    
+    // 为 Azure 添加 API 版本参数
+    if (config && config.apiVersion) {
+      queryParams.push(`api-version=${config.apiVersion}`);
+    }
+    
+    // 拼接查询参数
+    if (queryParams.length > 0) {
+      url += '?' + queryParams.join('&');
+    }
+    
+    console.info(`构建的完整API URL: ${url}`);
+    return url;
   }
 
   /**
@@ -400,15 +503,21 @@ ${info.description}
     return new Promise((resolve, reject) => {
       const httpRequest = http.createHttp();
       
-      const url = `${config.baseUrl}/chat/completions`;
+      // 使用新的 URL 构建方法
+      let url = this.buildApiUrl(this.currentProvider, config.baseUrl);
+      
+      // 为 Gemini 添加 API Key 参数
+      if (this.currentProvider === 'gemini') {
+        const separator = url.includes('?') ? '&' : '?';
+        url += `${separator}key=${config.apiKey}`;
+      }
+      
+      // 根据提供商构建请求头
+      const headers = this.buildRequestHeaders(config.apiKey);
       
       const options: http.HttpRequestOptions = {
         method: http.RequestMethod.POST,
-        header: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${config.apiKey}`,
-          'User-Agent': 'ChatWithAI/1.0.0'
-        },
+        header: headers,
         extraData: JSON.stringify(requestBody),
         expectDataType: http.HttpDataType.STRING,
         usingCache: false,
@@ -416,6 +525,8 @@ ${info.description}
         connectTimeout: 30000,
         readTimeout: 60000
       };
+
+      console.info(`发送 ${this.currentProvider} API 请求到: ${url}`);
 
       httpRequest.request(url, options, (err, data) => {
         if (err) {
@@ -448,6 +559,32 @@ ${info.description}
         resolve(data.result as string);
       });
     });
+  }
+
+  /**
+   * 构建请求头
+   */
+  private buildRequestHeaders(apiKey: string): Record<string, string> {
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+      'User-Agent': 'ChatWithAI/1.0.0'
+    };
+
+    // 根据提供商设置不同的授权头
+    switch (this.currentProvider) {
+      case 'claude':
+        headers['x-api-key'] = apiKey;
+        headers['anthropic-version'] = '2023-06-01';
+        break;
+      case 'gemini':
+        // Gemini 使用 URL 参数传递 API Key，这里不设置 Authorization
+        break;
+      default:
+        headers['Authorization'] = `Bearer ${apiKey}`;
+        break;
+    }
+
+    return headers;
   }
 
   /**

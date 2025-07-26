@@ -59,6 +59,8 @@ export interface ProviderConfig {
   id: AIProvider;
   name: string;
   apiHost: string;
+  apiPath?: string; // API 路径，可选字段
+  apiVersion?: string; // API 版本，可选字段，主要用于 Azure
   apiKeyRequired: boolean;
   supportedModels: string[];
   description: string;
@@ -730,6 +732,7 @@ export const DEFAULT_PROVIDERS: ProviderConfig[] = [
     id: AIProvider.VolcEngine,
     name: 'VolcEngine',
     apiHost: 'https://ark.cn-beijing.volces.com',
+    apiPath: '/api/v3/chat/completions',
     apiKeyRequired: true,
     supportedModels: ['deepseek-v3-250324', 'deepseek-r1-250528', 'doubao-1-5-thinking-pro-250415', 'doubao-1.5-vision-pro-250328'],
     description: '火山引擎提供的AI模型服务'
@@ -762,6 +765,7 @@ export const DEFAULT_PROVIDERS: ProviderConfig[] = [
     id: AIProvider.Azure,
     name: 'Azure OpenAI',
     apiHost: 'https://<resource_name>.openai.azure.com',
+    apiVersion: '2024-05-01-preview',
     apiKeyRequired: true,
     supportedModels: [],
     description: 'Microsoft Azure 提供的 OpenAI 服务'
